@@ -1,0 +1,29 @@
+# 1. Создаем клиент
+client = chromadb.Client(Settings(
+    chroma_db_impl="duckdb+parquet",
+    persist_directory="./chroma_db"
+))
+
+# 2. Работаем с коллекциями
+# Список всех коллекций
+collections = client.list_collections()
+print(collections)
+
+# Создаем новую коллекцию
+collection = client.create_collection(name="faces")
+
+# Или получаем существующую
+collection = client.get_collection(name="faces")
+
+# 3. Добавляем данные
+collection.add(
+    embeddings=[[0.1, 0.2, 0.3, ...]],  # вектор
+    metadatas=[{"name": "Иван"}],       # метаданные
+    ids=["face_1"]                      # уникальный ID
+)
+
+# 4. Ищем похожие
+results = collection.query(
+    query_embeddings=[[0.1, 0.2, 0.3, ...]],
+    n_results=3
+)
