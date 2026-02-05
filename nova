@@ -1,29 +1,91 @@
-# 1. Создаем клиент
-client = chromadb.Client(Settings(
-    chroma_db_impl="duckdb+parquet",
-    persist_directory="./chroma_db"
-))
+mport streamlit as st
+import cv2
+import numpy as np
+from ultralytics import YOLO
+import time
 
-# 2. Работаем с коллекциями
-# Список всех коллекций
-collections = client.list_collections()
-print(collections)
+st.title("Идп")
 
-# Создаем новую коллекцию
-collection = client.create_collection(name="faces")
+@st.cache_resource
+def load_model():
+    return YOLO('yolov8n.pt')
 
-# Или получаем существующую
-collection = client.get_collection(name="faces")
+model = load_model()
 
-# 3. Добавляем данные
-collection.add(
-    embeddings=[[0.1, 0.2, 0.3, ...]],  # вектор
-    metadatas=[{"name": "Иван"}],       # метаданные
-    ids=["face_1"]                      # уникальный ID
-)
+if 'camera' not in st.session_state:
+    cam = cv2.VideoCapture(0)
+   
+    st.session_state.camera = cam
+if 'person' not in st.session_state:
+    st.session_state.person = False
+if 'pass_item' not in st.session_state:
+    st.session_state.pass_item = False
+if 'frame' not in st.session_state:
+    st.session_state.frame = None
 
-# 4. Ищем похожие
-results = collection.query(
-    query_embeddings=[[0.1, 0.2, 0.3, ...]],
-    n_results=3
-)
+
+
+
+def detect_objects(frame):
+    if frame is None:
+        return frame, False, False
+    
+    results = model(frame, verbose=False)
+    
+    annotated = frame.copy()
+    person = False
+    pass_item = False
+    
+    if results[0].boxes is not None:
+        for box in results[0].boxes:
+            cls_id = int(box.cls[0])
+            conf = float(box.conf[0])
+            
+            x1, y1, x2, y2 = map(int, box.xyxy[0].cpu().numpy())
+                       
+            if cls_id == 0 and conf > 0.5:
+                person = True
+                cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                         
+            if cls_id in [66, 67] and conf > 0.3:
+                pass_item = True
+                cv2.rectangle(annotated, (x1, y1), (x2, y2), (255, 0, 0), 2)
+           
+    return annotated, person, pass_item
+
+col1, col2 = st.columns([3, 1])
+
+with col1:
+    st.subheader("Кам")
+    video_place = st.empty()
+
+    if st.session_state.camera is not None and st.session_state.camera.isOpened():
+        ret, frame = st.session_state.camera.read()
+        if ret:
+            st.session_state.frame = frame
+            processed, person_det, pass_det = detect_objects(frame)
+            st.session_state.person = person_det
+            st.session_state.pass_item = pass_det
+            display = cv2.cvtColor(processed, cv2.COLOR_BGR2RGB)
+            video_place.image(display, width=640)
+        elif st.session_state.frame is not None:
+            display = cv2.cvtColor(st.session_state.frame, cv2.COLOR_BGR2RGB)
+            video_place.image(display, width=640)
+    else:
+        video_place.error("notopc")
+
+with col2:
+    st.subheader("statdos")
+    
+    if st.session_state.person and st.session_state.pass_item:
+        st.success("ДРАЗ")
+        st.write("Лп")
+    elif st.session_state.person or st.session_state.pass_item:
+        st.error("ДЗ")
+        st.write("Тлп")
+    else:
+        st.warning("О")
+
+if st.session_state.camera is not None and st.session_state.camera.isOpened():
+    time.sleep(0.066)
+    st.rerun()
